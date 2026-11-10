@@ -45,7 +45,10 @@ app.get('/', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
+  if (err.name === 'MulterError' || (err.message && (err.message.includes('allowed') || err.message.includes('image')))) {
+    return res.status(400).json({ message: err.message });
+  }
+  res.status(500).json({ message: err.message || 'Internal Server Error' });
 });
 
 // Start Server
