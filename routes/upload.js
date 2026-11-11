@@ -36,7 +36,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 20 * 1024 * 1024 // Limit file size to 20MB
+    fileSize: 50 * 1024 * 1024 // Limit file size to 50MB
   },
   fileFilter: (req, file, cb) => {
     const isImageMime = file.mimetype && file.mimetype.startsWith('image/');
@@ -70,21 +70,36 @@ router.post('/', upload.single('image'), async (req, res) => {
       });
     }
 
-    // Convert file buffer to base64 data URI
     const safeMime = resolveMimeType(req.file);
-    const fileBase64 = `data:${safeMime};base64,${req.file.buffer.toString('base64')}`;
-
-    // Upload to Cloudinary with explicit resource_type: 'image'
-    const result = await cloudinary.uploader.upload(fileBase64, {
+    const uploadOptions = {
       folder: 'mayoora_cine_rentals',
       resource_type: 'image'
-    });
+    };
 
-    // Return secure URL and public_id
-    res.status(200).json({
-      url: result.secure_url,
-      public_id: result.public_id
-    });
+    if (safeMime && safeMime.includes('webp')) {
+      uploadOptions.format = 'webp';
+    }
+
+    // Stream upload directly to Cloudinary
+    const stream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error) {
+          console.error('Cloudinary stream error:', error);
+          return res.status(500).json({
+            message: 'Failed to upload image to Cloudinary',
+            error: error.message
+          });
+        }
+
+        res.status(200).json({
+          url: result.secure_url,
+          public_id: result.public_id
+        });
+      }
+    );
+
+    stream.end(req.file.buffer);
   } catch (error) {
     console.error('Cloudinary upload error:', error);
     res.status(500).json({
