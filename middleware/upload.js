@@ -34,7 +34,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 20 * 1024 * 1024 // Limit to 20MB
+    fileSize: 50 * 1024 * 1024 // Limit to 50MB
   },
   fileFilter: (req, file, cb) => {
     const isImageMime = file.mimetype && file.mimetype.startsWith('image/');
@@ -49,7 +49,7 @@ const upload = multer({
   }
 });
 
-// Helper function to upload an image buffer to Cloudinary
+// Helper function to upload an image buffer directly to Cloudinary via stream
 const uploadToCloudinary = (fileBuffer, mimeType = 'image/jpeg') => {
   return new Promise((resolve, reject) => {
     if (
@@ -61,14 +61,25 @@ const uploadToCloudinary = (fileBuffer, mimeType = 'image/jpeg') => {
       return reject(new Error('Cloudinary credentials are not configured on the backend. Please check the backend .env file.'));
     }
 
-    const safeMime = (!mimeType || mimeType === 'application/octet-stream') ? 'image/webp' : mimeType;
-    const fileBase64 = `data:${safeMime};base64,${fileBuffer.toString('base64')}`;
-    cloudinary.uploader.upload(fileBase64, {
+    const uploadOptions = {
       folder: 'mayoora_cine_rentals',
       resource_type: 'image'
-    })
-    .then(result => resolve(result.secure_url))
-    .catch(error => reject(error));
+    };
+
+    // If file is WebP, strictly preserve webp format so Cloudinary never delivers it as JPG
+    if (mimeType && mimeType.includes('webp')) {
+      uploadOptions.format = 'webp';
+    }
+
+    const stream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+
+    stream.end(fileBuffer);
   });
 };
 
